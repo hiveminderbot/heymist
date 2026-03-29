@@ -1,0 +1,47 @@
+# heymist configuration
+wake_phrase: "hey mist"
+
+# Transcription backend: "whisper-local" or "cohere-api"
+backend: whisper-local
+
+# Whisper local settings
+whisper:
+  model: small.en
+  threads: 4
+
+# Cohere API settings (for future use)
+cohere:
+  # Set COHERE_API_KEY env var or put key here
+  api_key: ""
+
+# Audio settings
+audio:
+  sample_rate: 16000
+  # VAD energy threshold (0-1, lower = more sensitive)
+  # 0.015 balances between ambient noise and catching full sentences
+  vad_threshold: 0.015
+  # Seconds of silence before stopping recording
+  # 2s gives time to pause between "hey mist" and command
+  silence_duration: 2.0
+  # Minimum speech duration in seconds (raised to avoid short noises)
+  min_speech: 1.0
+  # Maximum recording duration in seconds
+  max_duration: 30
+
+# Output method: "ydotool" or "clipboard"
+output: ydotool
+
+# Prefix prepended to dictated text (helps LLMs understand context)
+prefix: "[voice] "
+
+# Wake word detection (openwakeword)
+# Use "builtin:hey_jarvis" for pre-trained, or path to custom .tflite model
+wakeword:
+  model: "builtin:hey_jarvis"
+  threshold: 0.5
+
+# Audio feedback
+feedback:
+  enabled: true
+  # "beep" uses pw-play, "notify" uses notify-send
+  type: notify

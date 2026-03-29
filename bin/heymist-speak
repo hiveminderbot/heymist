@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# heymist-speak — pipe text to heymist TTS
+# Usage: echo "hello" | heymist-speak
+#        heymist-speak "hello world"
+#        heymist-speak < file.txt
+
+FIFO="$HOME/.local/share/heymist/speak.fifo"
+
+if [ ! -p "$FIFO" ]; then
+    echo "heymist TTS FIFO not found at $FIFO" >&2
+    echo "Is heymist running?" >&2
+    exit 1
+fi
+
+if [ $# -gt 0 ]; then
+    # Arguments passed directly
+    printf '%s' "$*" > "$FIFO"
+else
+    # Read from stdin
+    cat > "$FIFO"
+fi

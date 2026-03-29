@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Claude Code Stop hook — speaks the last assistant response via heymist TTS.
+# Only speaks if the last user input was a voice command (contains [voice]).
+
+FIFO="$HOME/.local/share/heymist/speak.fifo"
+[ -p "$FIFO" ] || exit 0
+
+input=$(cat)
+
+# Extract transcript path
+transcript_path=$(echo "$input" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+print(data.get('transcript_path', ''))
+" 2>/dev/null)
+
+[ -z "$transcript_path" ] || [ ! -f "$transcript_path" ] && exit 0
+
+# Check if the last real user message (not tool_result) contained [voice]
+has_voice=$(tail -50 "$transcript_path" | python3 -c "
+import sys, json
+last_human_text = ''
+for line in sys.stdin:
+    line = line.strip()
+    if not line:
+        continue
+    try:
+        entry = json.loads(line)
+        if entry.get('type') == 'user':
+            content = entry.get('message', {}).get('content', '')
+            if isinstance(content, str) and content.strip():
+                last_human_text = content
+    except:
+        pass
+print('yes' if '[voice]' in last_human_text else 'no')
+" 2>/dev/null)
+
+[ "$has_voice" != "yes" ] && exit 0
+
+# Clean up the assistant message for speech
+response=$(echo "$input" | python3 -c "
+import sys, json, re
+data = json.load(sys.stdin)
+msg = data.get('last_assistant_message', '')
+if not msg:
+    sys.exit(0)
+msg = re.sub(r'\`\`\`[^\n]*\n.*?\`\`\`', 'code block omitted.', msg, flags=re.DOTALL)
+msg = re.sub(r'\`[^\`]+\`', lambda m: m.group(0).strip('\`'), msg)
+msg = re.sub(r'[#*_~\[\]]', '', msg)
+msg = re.sub(r'\(http[^\)]+\)', '', msg)
+msg = re.sub(r'\n{2,}', '. ', msg)
+msg = re.sub(r'\n', ' ', msg)
+if len(msg) > 1500:
+    msg = msg[:1500] + '... response truncated.'
+print(msg.strip())
+" 2>/dev/null)
+
+[ -n "$response" ] && printf '%s' "$response" > "$FIFO"
