@@ -23,13 +23,17 @@
           setuptools
           pyopen-wakeword
         ]);
+        greeterPython = pkgs.python3.withPackages (ps: with ps; [
+          opencv4
+          pyyaml
+        ]);
       in {
         default = self.packages.${system}.heymist;
 
         heymist = pkgs.stdenv.mkDerivation {
           pname = "heymist";
           version = "0.1.0";
-          src = ./.;
+          src = builtins.path { path = ./.; name = "heymist-src"; };
 
           nativeBuildInputs = [ pkgs.makeWrapper ];
 
@@ -73,6 +77,16 @@
             # TTS utility
             cp bin/heymist-speak $out/bin/
             chmod +x $out/bin/heymist-speak
+
+            # Greeter daemon
+            cp src/greeter.py $out/lib/heymist/
+            makeWrapper ${greeterPython}/bin/python3 $out/bin/heymist-greeter \
+              --add-flags "$out/lib/heymist/greeter.py" \
+              --set HEYMIST_CASCADE "${pkgs.opencv}/share/opencv4/haarcascades/haarcascade_frontalface_default.xml" \
+              --prefix PATH : ${pkgs.lib.makeBinPath [
+                pkgs.piper-tts
+                pkgs.sox
+              ]}
 
             # Claude Code hook
             cp bin/heymist-stop-hook $out/bin/
@@ -123,6 +137,22 @@
               default = false;
               description = "Install a Claude Code Stop hook for TTS responses to voice commands.";
             };
+
+            greeter = {
+              enable = lib.mkEnableOption "heymist-greeter face detection daemon";
+
+              absenceThreshold = lib.mkOption {
+                type = lib.types.int;
+                default = 120;
+                description = "Seconds of absence before greeting again.";
+              };
+
+              camera = lib.mkOption {
+                type = lib.types.int;
+                default = 0;
+                description = "Webcam device index.";
+              };
+            };
           };
 
           config = lib.mkIf cfg.enable {
@@ -153,6 +183,29 @@
                 ExecStart = "${cfg.package}/bin/heymist";
                 Restart = "on-failure";
                 RestartSec = 5;
+              };
+
+              Install = {
+                WantedBy = [ "graphical-session.target" ];
+              };
+            };
+
+            # Greeter service
+            systemd.user.services.heymist-greeter = lib.mkIf cfg.greeter.enable {
+              Unit = {
+                Description = "heymist greeter — face detection greeting daemon";
+                After = [ "graphical-session.target" "pipewire.service" ];
+                Requires = [ "graphical-session.target" ];
+              };
+
+              Service = {
+                Type = "simple";
+                Environment = [
+                  "HEYMIST_CAMERA=${toString cfg.greeter.camera}"
+                ];
+                ExecStart = "${cfg.package}/bin/heymist-greeter";
+                Restart = "on-failure";
+                RestartSec = 10;
               };
 
               Install = {
